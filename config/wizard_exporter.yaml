@@ -1,0 +1,28 @@
+---
+default: True
+
+targets:
+  elastic_test_all_events:
+    type: elastic
+    interval: 300
+    url: https://localhost:9200/test-*/_search
+    description: elastic HQ
+    username: ENV_ES_USERNAME
+    password: ENV_ES_PASSWORD
+    payload:
+      size: 10000
+      query:
+        bool:
+          must:
+            - range:
+                "@timestamp":
+                  gte: "now-15m"
+                  lt: "now"
+
+  website_signin:
+    type: imported_lib
+    lib_name: "libs.website_signin"
+    func_name: check_website_signin
+    description: "Check website sign in page"
+    interval: 30
+    metric_field: ellapsed_time

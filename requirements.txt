@@ -1,0 +1,4 @@
+prometheus-client==0.12.0
+yamllint==1.26.1
+selenium==3.141.0
+requests==2.26.0
