@@ -2,27 +2,34 @@
 default: True
 
 targets:
-  elastic_test_all_events:
-    type: elastic
+  get_elastic_index_state:
+    description: ElasticSearch test index state (hits and request time)
+    lib_name: "libs.elastic_request"
+    func_name: get_elastic_index_state
     interval: 300
-    url: https://localhost:9200/test-*/_search
-    description: elastic HQ
-    username: ENV_ES_USERNAME
-    password: ENV_ES_PASSWORD
-    payload:
-      size: 10000
-      query:
-        bool:
-          must:
-            - range:
-                "@timestamp":
-                  gte: "now-15m"
-                  lt: "now"
+    options:
+      url: https://localhost:9200/test-*/_search
+      payload:
+        size: 10000
+        query:
+          bool:
+            must:
+              - range:
+                  "@timestamp":
+                    gte: "now-15m"
+                    lt: "now"
+    metrics:
+      - seconds
+      - hits
 
-  website_signin:
-    type: imported_lib
-    lib_name: "libs.website_signin"
-    func_name: check_website_signin
-    description: "Check website sign in page"
-    interval: 30
-    metric_field: ellapsed_time
+  get_covid_state:
+    description: "Check covid cases from the world health organization"
+    lib_name: "libs.elastic_request"
+    func_name: get_who_covid_information
+    interval: 100
+    options:
+      url: https://www.who.int/home
+    metrics:
+      - ellapsed_time
+      - covid_confirmed_cases
+      - covid_confirmed_deaths

@@ -14,7 +14,6 @@ from prometheus_client import (
     Gauge,
     Info
 )
-import requests
 import yaml
 import urllib3
 import importlib
@@ -22,7 +21,6 @@ import importlib
 
 DEBUG = strtobool(os.getenv("DEBUG", "False"))
 HTTP_PORT = int(os.getenv("HTTP_PORT", "9118"))
-HEADERS = {"Content-Type": "application/json"}
 SCRIPT_PATH = str(Path(__file__).parent)
 IMPUT_FILE_NAME = os.getenv("IMPUT_FILE_NAME", f"{SCRIPT_PATH}/config/wizard_exporter.yaml")
 
@@ -38,22 +36,6 @@ else:
     logging.getLogger().setLevel(logging.INFO)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def get_secret(secret_str):
-    """Get secret from env according to prefix"""
-
-    if not secret_str:
-        result = None
-    elif "ENV_" in secret_str[:4]:
-        secret_str = secret_str[4:]
-        secret = os.getenv(secret_str, None)
-        if not secret:
-            logging.error("Unable to find environment variable %s", secret_str)
-            result = None
-        else:
-            result = secret
-    else:
-        result = secret_str
-    return result
 
 
 def read_input_file(file_path):
@@ -68,46 +50,19 @@ def add_prometheus_metrics(name, target):
     """Add prometheus metrics to write data in."""
 
     METRICS[name] = Gauge(name, target["description"])
-    METRICS[f"{name}_hits"] = Gauge(f"{name}_hits", f"{target['description']} hits count")
     METRICS[f"{name}_counter"] = Counter(f"{name}_counter", target["description"])
+    for metric in target.get("metrics", []):
+        METRICS[metric] = Gauge(metric, f"{target.get('description', '')} {metric}")
 
 
 def schedule_task(name, target):
     """Create a thread and run command by timer with custom interval."""
 
-    if target["type"].lower() == "elastic":
-        username = get_secret(target["username"])
-        password = get_secret(target["password"])
-
-        start = datetime.now()
-        response = requests.request(
-            method="GET",
-            url=target["url"],
-            headers=HEADERS,
-            auth=requests.auth.HTTPBasicAuth(username, password),
-            data=json.dumps(target["payload"]),
-            verify=False,
-            timeout=120,
-        )
-        end = datetime.now()
-        diff_seconds = (end - start).seconds
-
-        try:
-            hits = response.json()["hits"]["hits"]
-            METRICS[f"{name}_hits"].set(len(hits))
-            METRICS[name].set(diff_seconds)
-            logging.info("%s completed. time: %i sec, hits: %i", name, diff_seconds, len(hits))
-        except Exception as exception:
-            logging.error("Failed to parse response: %s", str(exception))
-            METRICS[name].set(1000)  # set 1000 sec. to trigger monitoring
-
-    if target["type"].lower() == "imported_lib":
-        imported_module = importlib.import_module(target["lib_name"])
-        func = getattr(imported_module, target["func_name"])
-        result = func()
-        METRICS[name].set(result.get(target["metric_field"], 100))
-        logging.error("WebSite sign in result: %s" % str(result))
-
+    imported_module = importlib.import_module(target["lib_name"])
+    func = getattr(imported_module, target["func_name"])
+    result = func(target.get("options", {}))
+    for metric in target["metrics"]:
+        METRICS[metric].set(result.get(metric, 100))
     METRICS[f"{name}_counter"].inc()
 
     threading.Timer(target["interval"], schedule_task, [name, target]).start()
